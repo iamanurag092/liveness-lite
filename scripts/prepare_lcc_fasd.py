@@ -168,6 +168,7 @@ def main() -> None:
         sys.exit("Internal error: subject ids shared between train and dev")
 
     moved = copied = 0
+    failed: list[str] = []
     for row in tqdm(rows, desc="writing"):
         out_dir = dst / row["split"] / row["label"]
         out_dir.mkdir(parents=True, exist_ok=True)
@@ -186,16 +187,29 @@ def main() -> None:
             previous.replace(target)
             moved += 1
             continue
-        if args.resize:
-            with Image.open(src / row["name"]) as image:
-                resized = image.convert("RGB").resize(
-                    (args.resize, args.resize), Image.Resampling.LANCZOS
-                )
-            resized.save(target)
-        else:
-            shutil.copy2(src / row["name"], target)
+        try:
+            if args.resize:
+                with Image.open(src / row["name"]) as image:
+                    resized = image.convert("RGB").resize(
+                        (args.resize, args.resize), Image.Resampling.LANCZOS
+                    )
+                resized.save(target)
+            else:
+                shutil.copy2(src / row["name"], target)
+        except OSError:  # unreadable or truncated source image: skip it, report it below
+            target.unlink(missing_ok=True)
+            failed.append(row["name"])
+            continue
         copied += 1
     print(f"files copied: {copied}, moved between splits: {moved}")
+    if failed:
+        bad = set(failed)
+        rows = [r for r in rows if r["name"] not in bad]
+        counts = Counter((r["split"], r["label"]) for r in rows)
+        (dst / "skipped_unreadable.txt").write_text("\n".join(sorted(failed)) + "\n")
+        print(
+            f"WARNING: skipped {len(failed)} unreadable source images (see skipped_unreadable.txt)"
+        )
 
     with open(dst / "manifest.csv", "w", newline="", encoding="utf-8") as f:
         writer = csv.writer(f)
@@ -208,6 +222,7 @@ def main() -> None:
         "source": str(src),
         "resize": args.resize,
         "seed": args.seed,
+        "skipped_unreadable": len(failed),
         "dev_fraction": args.dev_fraction,
         "counts": {
             f"{s}/{label}": counts[(s, label)]

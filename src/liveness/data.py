@@ -40,23 +40,34 @@ class RandomJPEG:
         return Image.open(buffer).convert("RGB")
 
 
-def build_transforms(img_size: int, train: bool) -> T.Compose:
+AUGMENT_PRESETS = ("full", "basic")
+
+
+def build_transforms(img_size: int, train: bool, augment: str = "full") -> T.Compose:
+    """``full``: crop, flip, colour jitter, blur, random JPEG. ``basic``: no blur / JPEG."""
+    if augment not in AUGMENT_PRESETS:
+        raise ValueError(f"Unknown augment preset {augment!r}; choose from {AUGMENT_PRESETS}")
     if train:
-        return T.Compose(
-            [
-                T.RandomResizedCrop(img_size, scale=(0.7, 1.0), ratio=(0.9, 1.1)),
-                T.RandomHorizontalFlip(),
-                T.ColorJitter(brightness=0.3, contrast=0.3, saturation=0.3, hue=0.05),
-                T.RandomApply([T.GaussianBlur(3, sigma=(0.1, 1.5))], p=0.2),
-                RandomJPEG(),
-                T.ToTensor(),
-            ]
-        )
+        steps = [
+            T.RandomResizedCrop(img_size, scale=(0.7, 1.0), ratio=(0.9, 1.1)),
+            T.RandomHorizontalFlip(),
+            T.ColorJitter(brightness=0.3, contrast=0.3, saturation=0.3, hue=0.05),
+        ]
+        if augment == "full":
+            steps += [T.RandomApply([T.GaussianBlur(3, sigma=(0.1, 1.5))], p=0.2), RandomJPEG()]
+        return T.Compose([*steps, T.ToTensor()])
     return T.Compose([T.Resize((img_size, img_size)), T.ToTensor()])
 
 
 class SpoofDataset(Dataset):
-    def __init__(self, root: str | Path, split: str, img_size: int, train: bool = False):
+    def __init__(
+        self,
+        root: str | Path,
+        split: str,
+        img_size: int,
+        train: bool = False,
+        augment: str = "full",
+    ):
         self.samples: list[tuple[Path, int]] = []
         for class_name, label in CLASS_TO_LABEL.items():
             folder = Path(root) / split / class_name
@@ -67,7 +78,7 @@ class SpoofDataset(Dataset):
                     self.samples.append((path, label))
         if not self.samples:
             raise RuntimeError(f"No images found under {Path(root) / split}")
-        self.transform = build_transforms(img_size, train)
+        self.transform = build_transforms(img_size, train, augment)
 
     def __len__(self) -> int:
         return len(self.samples)
@@ -89,7 +100,13 @@ def make_loader(cfg: dict, split: str, train: bool) -> DataLoader:
     data_cfg = cfg["data"]
     workers = int(data_cfg.get("num_workers", 0))
     batch_size = int(cfg["train"]["batch_size"]) * (1 if train else 2)
-    dataset = SpoofDataset(data_cfg["root"], split, int(data_cfg["img_size"]), train=train)
+    dataset = SpoofDataset(
+        data_cfg["root"],
+        split,
+        int(data_cfg["img_size"]),
+        train=train,
+        augment=data_cfg.get("augment", "full"),
+    )
     return DataLoader(
         dataset,
         batch_size=batch_size,

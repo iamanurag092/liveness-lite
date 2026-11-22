@@ -17,6 +17,8 @@ import torch
 from torch import nn
 
 from liveness.data import make_loader
+from liveness.evaluate import onnx_scores
+from liveness.metrics import eer_and_threshold
 from liveness.model import count_flops, count_params, load_model
 from liveness.utils import load_config, save_json
 
@@ -46,40 +48,74 @@ def export_onnx(model: nn.Module, img_size: int, path: Path, opset: int = 17) ->
         torch.onnx.export(wrapper, dummy, str(path), **kwargs)
 
 
-def quantize_int8(fp32_path: Path, int8_path: Path, cfg: dict, max_batches: int = 20) -> None:
-    """Static INT8 (QDQ) quantisation, calibrated on the dev split (never on test)."""
+class DevCalibrationReader:
+    """Feeds dev-split batches (never test) to the ONNX Runtime calibrator."""
+
+    def __init__(self, loader, input_name: str, max_batches: int):
+        self.input_name = input_name
+        self.batches = iter(loader)
+        self.remaining = max_batches
+
+    def get_next(self):
+        if self.remaining <= 0:
+            return None
+        batch = next(self.batches, None)
+        if batch is None:
+            return None
+        self.remaining -= 1
+        return {self.input_name: batch[0].numpy().astype(np.float32)}
+
+
+def quantize_int8(
+    fp32_path: Path,
+    int8_path: Path,
+    cfg: dict | None = None,
+    max_batches: int = 20,
+    reader=None,
+    method: str = "minmax",
+    conv_only: bool = False,
+    reduce_range: bool = False,
+) -> None:
+    """Static INT8 (QDQ) quantisation.
+
+    method: minmax | percentile | entropy (activation range calibration).
+    conv_only: quantise only Conv/Gemm/MatMul; leave hard-swish, squeeze-excite products and
+    additions in float (often needed for MobileNetV3).
+    reduce_range: 7-bit weights/activations, avoids int8 saturation on CPUs without VNNI.
+    """
     from onnxruntime.quantization import (
         CalibrationDataReader,
+        CalibrationMethod,
         QuantFormat,
         QuantType,
         quantize_static,
     )
 
-    loader = make_loader(cfg, "dev", train=False)
+    methods = {
+        "minmax": CalibrationMethod.MinMax,
+        "percentile": CalibrationMethod.Percentile,
+        "entropy": CalibrationMethod.Entropy,
+    }
+    if method not in methods:
+        raise ValueError(f"Unknown calibration method {method!r}; choose from {sorted(methods)}")
+    if reader is None:
+        reader = DevCalibrationReader(make_loader(cfg, "dev", train=False), "image", max_batches)
 
-    class DevReader(CalibrationDataReader):
-        def __init__(self, input_name: str):
-            self.input_name = input_name
-            self.batches = iter(loader)
-            self.count = 0
-
+    class _Reader(CalibrationDataReader):
         def get_next(self):
-            if self.count >= max_batches:
-                return None
-            batch = next(self.batches, None)
-            if batch is None:
-                return None
-            self.count += 1
-            return {self.input_name: batch[0].numpy().astype(np.float32)}
+            return reader.get_next()
 
     quantize_static(
         str(fp32_path),
         str(int8_path),
-        DevReader("image"),
+        _Reader(),
         quant_format=QuantFormat.QDQ,
         activation_type=QuantType.QUInt8,
         weight_type=QuantType.QInt8,
         per_channel=True,
+        reduce_range=reduce_range,
+        calibrate_method=methods[method],
+        op_types_to_quantize=["Conv", "Gemm", "MatMul"] if conv_only else None,
     )
 
 
@@ -135,14 +171,32 @@ def check_budget(card: dict, budget: dict) -> list[str]:
     return violations
 
 
-def run(cfg: dict, checkpoint: str, out_dir: str, quantize: bool = True) -> dict:
+def dev_threshold(onnx_path: Path, cfg: dict) -> tuple[float, float]:
+    """Dev-EER operating point of an exported model: (threshold, dev EER)."""
+    import onnxruntime as ort
+
+    session = ort.InferenceSession(str(onnx_path), providers=["CPUExecutionProvider"])
+    labels, scores = onnx_scores(session, make_loader(cfg, "dev", train=False))
+    eer, threshold = eer_and_threshold(labels, scores)
+    return threshold, eer
+
+
+def run(
+    cfg: dict,
+    checkpoint: str,
+    out_dir: str,
+    quantize: bool = True,
+    quant_options: dict | None = None,
+) -> dict:
     out = Path(out_dir)
     model, ckpt = load_model(checkpoint, "cpu")
     img_size = int(ckpt["img_size"])
+    cfg = {**cfg, "data": {**cfg["data"], "img_size": img_size}}  # match the trained size
 
     fp32_path = out / "model_fp32.onnx"
     export_onnx(model, img_size, fp32_path)
     parity = verify_parity(model, fp32_path, img_size)
+    threshold, dev_eer = dev_threshold(fp32_path, cfg)
 
     card: dict = {
         "backbone": ckpt["model_cfg"]["name"],
@@ -152,14 +206,17 @@ def run(cfg: dict, checkpoint: str, out_dir: str, quantize: bool = True) -> dict
         "fp32_onnx_mb": round(fp32_path.stat().st_size / 1e6, 2),
         "fp32_latency": benchmark_onnx(fp32_path, img_size),
         "fp32_max_abs_diff_vs_torch": parity,
+        "threshold": round(threshold, 4),
+        "dev_eer": round(dev_eer, 4),
         "input": "float32 RGB in [0,1], shape (N,3,H,W)",
-        "output": "spoof probability, shape (N,); label 1 = spoof",
+        "output": "spoof probability, shape (N,); label 1 = spoof; spoof if score >= threshold",
     }
     if quantize:
         int8_path = out / "model_int8.onnx"
-        quantize_int8(fp32_path, int8_path, cfg)
+        quantize_int8(fp32_path, int8_path, cfg, **(quant_options or {}))
         card["int8_onnx_mb"] = round(int8_path.stat().st_size / 1e6, 2)
         card["int8_latency"] = benchmark_onnx(int8_path, img_size)
+        card["int8_options"] = quant_options or {}
     save_json(card, out / "model_card.json")
     return card
 
@@ -170,12 +227,24 @@ def main() -> None:
     parser.add_argument("--checkpoint", required=True)
     parser.add_argument("--out-dir", default="models")
     parser.add_argument("--no-quant", action="store_true")
+    parser.add_argument(
+        "--quant-method", default="minmax", choices=["minmax", "percentile", "entropy"]
+    )
+    parser.add_argument("--conv-only", action="store_true", help="quantise only Conv/Gemm/MatMul")
+    parser.add_argument("--reduce-range", action="store_true")
     parser.add_argument("--enforce-budget", action="store_true", help="exit 1 if budget exceeded")
     parser.add_argument("--override", nargs="*", default=[], help="key=value config overrides")
     args = parser.parse_args()
 
     cfg = load_config(args.config, args.override)
-    card = run(cfg, args.checkpoint, args.out_dir, quantize=not args.no_quant)
+    options = {
+        "method": args.quant_method,
+        "conv_only": args.conv_only,
+        "reduce_range": args.reduce_range,
+    }
+    card = run(
+        cfg, args.checkpoint, args.out_dir, quantize=not args.no_quant, quant_options=options
+    )
     for key, value in card.items():
         print(f"{key}: {value}")
 

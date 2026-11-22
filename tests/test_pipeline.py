@@ -46,6 +46,14 @@ def test_dataset_loads_labels_and_range(synthetic):
     assert float(y) in (0.0, 1.0)
 
 
+def test_augment_presets(synthetic):
+    for preset in ("full", "basic"):
+        x, _ = SpoofDataset(synthetic, "train", img_size=64, train=True, augment=preset)[0]
+        assert x.shape == (3, 64, 64)
+    with pytest.raises(ValueError):
+        SpoofDataset(synthetic, "train", img_size=64, train=True, augment="nope")
+
+
 def test_missing_split_raises(tmp_path):
     with pytest.raises(FileNotFoundError):
         SpoofDataset(tmp_path, "train", img_size=64)
@@ -63,6 +71,14 @@ def test_train_export_evaluate_end_to_end(synthetic, tmp_path):
     card = export.run(cfg, str(tmp_path / "run" / "best.pt"), str(tmp_path / "models"))
     assert card["fp32_max_abs_diff_vs_torch"] < 1e-3
     assert card["int8_onnx_mb"] < card["fp32_onnx_mb"]
+    assert 0.0 < card["threshold"] < 1.0 and 0.0 <= card["dev_eer"] <= 1.0
+
+    from liveness import predict
+
+    session, size = predict.load_session(tmp_path / "models" / "model_fp32.onnx")
+    some_image = next((synthetic / "test" / "spoof").glob("*.png"))
+    verdict = predict.predict_files(session, [str(some_image)], size, card["threshold"])[0]
+    assert verdict["verdict"] in ("live", "spoof") and 0.0 <= verdict["score"] <= 1.0
     assert export.check_budget(card, cfg["budget"]) == []
 
     for tag, path in (("fp32", "model_fp32.onnx"), ("int8", "model_int8.onnx")):

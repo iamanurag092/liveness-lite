@@ -28,3 +28,15 @@ Short records of choices and why. Add a new entry when a choice changes.
     test split intact and comparable, avoids frame leakage between train and dev, and makes the dev
     carving reproducible (`--seed`). Images are pre-resized to 256x256 to cut data-loading time
     (the 650 px PNGs would otherwise dominate epoch time on a 4-core laptop).
+13. **INT8 is only shipped if it passes a dev-set check.** The first static INT8 export (min-max
+    calibration, everything quantised) shrank the file from 6.09 MB to 1.87 MB but collapsed accuracy
+    (test AUC 0.48, chance level) and was slower on the benchmark CPU (p50 5.55 ms vs 4.06 ms for FP32).
+    `scripts/quant_sweep.py` now compares calibration methods and "convolutions only" recipes on the
+    dev split; if none stays within 0.01 dev EER of FP32, the FP32 ONNX model is the deliverable and
+    the failed attempt is reported. The FP32 model already meets the "lightweight" goal
+    (1.52M parameters, 0.056 GMACs, 6.1 MB, about 4 ms per image on one CPU thread).
+14. **Evaluation uses the image size stored with the model.** `evaluate.py` and `export.py` read it from
+    the checkpoint (or the ONNX input shape) instead of the config, so a 160 px model can never be
+    silently scored at 224 px.
+15. **The decision threshold travels with the model.** `export.py` stores the dev-EER threshold in
+    `model_card.json`; `predict.py` and the demo read it from there.

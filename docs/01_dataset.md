@@ -75,6 +75,16 @@ Other datasets with real/spoof folders: `scripts/prepare_data.py` (see its `--he
 Predefined splits: `--split-map training=train,development=dev,evaluation=test`.
 Flat data: `--auto-split --group-regex "(?:^|/)(\d+)_"` (the regex must capture the subject id).
 
+## Data integrity
+The first training attempt stopped with `UnidentifiedImageError` on one prepared image
+(`train/live/YOUTUBE_id20_s0_15.png`), so a damaged file had been written during preparation.
+- `python scripts/check_images.py --root data/processed --size 256` scans every prepared image
+  (full decode, optional size check). `--delete` removes the bad ones.
+- Re-running `scripts/prepare_lcc_fasd.py` with the same arguments recreates the missing files from the
+  original download. Source images that are themselves unreadable are skipped and listed in
+  `data/processed/skipped_unreadable.txt`; they are also excluded from `manifest.csv` and the counts.
+- Run the scanner after every (re)preparation and before long training runs.
+
 ## Rules
 - Never split randomly by image: frames of the same person in train and test inflate every metric.
 - Test split is used once per finished model; model and threshold choices use dev only.

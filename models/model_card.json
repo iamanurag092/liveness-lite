@@ -1,0 +1,17 @@
+{
+  "backbone": "mobilenet_v3_small",
+  "img_size": 224,
+  "params_m": 1.519,
+  "gmacs": 0.0555,
+  "fp32_onnx_mb": 6.09,
+  "fp32_latency": {
+    "p50_ms": 3.64,
+    "p95_ms": 4.98,
+    "mean_ms": 3.78
+  },
+  "fp32_max_abs_diff_vs_torch": 1.1920928955078125e-07,
+  "threshold": 0.1813,
+  "dev_eer": 0.0257,
+  "input": "float32 RGB in [0,1], shape (N,3,H,W)",
+  "output": "spoof probability, shape (N,); label 1 = spoof; spoof if score >= threshold"
+}

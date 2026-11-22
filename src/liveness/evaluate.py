@@ -7,6 +7,7 @@ applied unchanged to the *test* split, which is the only number to report.
 from __future__ import annotations
 
 import argparse
+import copy
 from pathlib import Path
 
 import matplotlib
@@ -84,24 +85,32 @@ def _plots(out_dir: Path, tag: str, labels, scores, threshold: float) -> None:
 
 
 def run(cfg: dict, checkpoint: str | None, onnx_path: str | None, out_dir: str, tag: str) -> dict:
-    dev_loader = make_loader(cfg, "dev", train=False)
-    test_loader = make_loader(cfg, "test", train=False)
-
+    cfg = copy.deepcopy(cfg)
     if onnx_path:
         import onnxruntime as ort
 
         session = ort.InferenceSession(onnx_path, providers=["CPUExecutionProvider"])
+        height = session.get_inputs()[0].shape[2]
+        if isinstance(height, int):  # always evaluate at the size the model was built for
+            cfg["data"]["img_size"] = height
+    else:
+        device = get_device(cfg.get("device", "auto"))
+        model, ckpt = load_model(checkpoint, device)
+        cfg["data"]["img_size"] = int(ckpt["img_size"])
+
+    dev_loader = make_loader(cfg, "dev", train=False)
+    test_loader = make_loader(cfg, "test", train=False)
+    if onnx_path:
         dev_labels, dev_scores = onnx_scores(session, dev_loader)
         test_labels, test_scores = onnx_scores(session, test_loader)
     else:
-        device = get_device(cfg.get("device", "auto"))
-        model, _ = load_model(checkpoint, device)
         dev_labels, dev_scores = torch_scores(model, dev_loader, device)
         test_labels, test_scores = torch_scores(model, test_loader, device)
 
     _, dev_threshold = eer_and_threshold(dev_labels, dev_scores)
     results = {
         "source": onnx_path or checkpoint,
+        "img_size": cfg["data"]["img_size"],
         "dev": summarize(dev_labels, dev_scores, dev_threshold),
         "test_at_dev_eer_threshold": summarize(test_labels, test_scores, dev_threshold),
         "test_at_0.5": summarize(test_labels, test_scores, 0.5),
