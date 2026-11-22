@@ -20,7 +20,32 @@ The company supplied no data, so one must be chosen and documented. **Status: no
 | Vendor samples on Hugging Face (TrainingDataPro, Axon) | Sample subsets of commercial datasets; the full versions are sold. | Not suitable as the main training set |
 
 ## Decision
-_To be filled in: chosen dataset, download URL, licence, citation, date downloaded._
+**LCC-FASD**, Kaggle copy `aleksandrpikul222/lcc-fasd` (downloaded with `scripts/dataset_download.py`).
+Licence and citation: _to be recorded from the dataset's Kaggle page and original paper before submission._
+
+What the download contains (checked locally):
+- one flat folder `LCC_FASD/` with 18,827 PNG files (roughly 650-680 px square) and 4 list files
+- `CLIENT_TRAIN.txt` (1,553), `CLIENT_TEST.txt` (389), `IMPOSTER_TRAIN.txt` (13,508),
+  `IMPOSTER_TEST.txt` (3,377); the four add up to exactly the number of PNGs
+- label convention assumed from biometrics terminology: **client = live, imposter = spoof**.
+  Confirm it visually with the preview sheets written by the prepare script before training.
+- file names such as `YOUTUBE_id43_s0_105.png` or `AA5742_id154_s0_112.png` carry an `idNN` token
+  (subject or video id, used as the split group); some test files are plain `spoof_1793.png`
+- no dev split is provided, so dev is carved out of the official train list by group
+- strong class imbalance (about 90% spoof), so accuracy is not reported as a headline metric
+
+## Findings from the first preparation run
+- Label convention confirmed visually (preview sheets): client = live, imposter = spoof.
+- 7,580 of 18,827 files (about 40%) have no `idNN` in the name (`real_N.png`, `spoof_N.png`); they are
+  grouped by blocks of 200 consecutive indices, which is an approximation, not a subject id.
+- The official train and test lists are **not subject-disjoint**: 12 ids occur in both (for example
+  `id117`, `id122`, `id123` have live images on both sides; `id42`, `id43`, `id48` have both classes
+  on both sides). Whether an id is one person or just a reused number is not documented.
+- First dev carve was unbalanced (117 live vs 2,345 spoof); the carve now selects whole groups until
+  live and spoof each reach the target share, so the dev threshold is not set by a handful of images.
+- Handling: the official test split is used as given (comparable with other work). The overlap and the
+  approximate grouping are stated as limitations in the report. Planned extra check: also report test
+  metrics restricted to ids that never occur in train/dev, to show how much the overlap matters.
 
 ## Expected layout after preparation
 ```
@@ -30,19 +55,25 @@ data/processed/
 ```
 
 ## Preparing
-Predefined splits (rename keys to match the raw folder names):
-```bash
-python scripts/prepare_data.py --src RAW --dst data/processed \
-  --split-map training=train,development=dev,evaluation=test
+LCC-FASD (this project):
+```powershell
+python scripts/prepare_lcc_fasd.py `
+  --src "C:\Users\anura\.cache\kagglehub\datasets\aleksandrpikul222\lcc-fasd\versions\1\LCC_FASD" `
+  --dst data/processed --resize 256
 ```
-No splits provided - subject-disjoint random split; `--group-regex` must capture the subject id:
-```bash
-python scripts/prepare_data.py --src RAW --dst data/processed \
-  --auto-split --group-regex "(?:^|/)(\d+)_"
-```
-Class folders are recognised by name (`live/real/genuine/bonafide` vs `spoof/fake/attack/imposter`);
-extend with `--live-names` / `--spoof-names`. The script prints per-split counts and fails if any
-subject appears in more than one split.
+- `--resize 256` shrinks every image to 256x256 while copying (faster training, about 2 GB on disk);
+  `--resize 0` keeps the originals. Training at 224 or below still works from the 256 copies.
+- The script prints per-split counts, writes `manifest.csv` and `dataset_summary.json`, and creates
+  `data/processed/_preview/*.png` contact sheets. **Open them** and check that the live sheets show
+  genuine faces and the spoof sheets show attacks (screens, prints) before training.
+- It also reports how many subject ids and id-less index blocks occur in both train/dev and the
+  official test list.
+- Re-running is safe and fast: files already present are moved between split folders, not recopied.
+  If you change `--resize`, delete `data/processed` first.
+
+Other datasets with real/spoof folders: `scripts/prepare_data.py` (see its `--help`).
+Predefined splits: `--split-map training=train,development=dev,evaluation=test`.
+Flat data: `--auto-split --group-regex "(?:^|/)(\d+)_"` (the regex must capture the subject id).
 
 ## Rules
 - Never split randomly by image: frames of the same person in train and test inflate every metric.

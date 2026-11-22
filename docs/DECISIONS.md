@@ -24,3 +24,7 @@ Short records of choices and why. Add a new entry when a choice changes.
     weights, 12 steps) gave dev AUC exactly 0.5 while the training loss fell: running statistics had barely
     moved, so eval-mode outputs collapsed to a constant. A higher momentum lets short fine-tuning runs
     adapt; `train.py` also warns when dev scores are near-constant.
+12. **LCC-FASD with its official lists; dev carved from train by subject id.** Keeps the official
+    test split intact and comparable, avoids frame leakage between train and dev, and makes the dev
+    carving reproducible (`--seed`). Images are pre-resized to 256x256 to cut data-loading time
+    (the 650 px PNGs would otherwise dominate epoch time on a 4-core laptop).
