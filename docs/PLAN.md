@@ -6,7 +6,7 @@ Rule: a phase is done only when its acceptance criteria are met and the docs are
 - [x] Package layout, configs, training / evaluation / export code
 - [x] Metric unit tests (run locally); model / data / end-to-end tests (run in CI)
 - [x] CI: lint, tests, synthetic smoke run, budget gate
-- [ ] First green CI run on GitHub (confirms the torch/ONNX code, which was not executed during authoring)
+- [✅] First green CI run on GitHub (confirms the torch/ONNX code, which was not executed during authoring)
 
 ## Phase 1 - Data
 - [ ] Choose dataset (docs/01_dataset.md) and record license / citation there

@@ -11,7 +11,7 @@ MobileNet backbone, single-logit head, exported to ONNX and quantised to INT8.
 
 | Phase | What | State |
 |---|---|---|
-| 0 | Repo scaffold, training / evaluation / export code, tests, CI | done (code written; first CI run pending) |
+| 0 | Repo scaffold, training / evaluation / export code, tests, CI | done (code written; Done✅) |
 | 1 | Dataset chosen, downloaded, prepared, leakage-checked | **next** - see [docs/01_dataset.md](docs/01_dataset.md) |
 | 2 | Baseline training + evaluation | todo |
 | 3 | Ablations (image size, backbone, augmentation) | todo |
