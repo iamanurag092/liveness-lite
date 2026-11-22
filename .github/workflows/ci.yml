@@ -1,0 +1,51 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: |
+            requirements.txt
+            requirements-dev.txt
+
+      - name: Install (CPU PyTorch)
+        run: |
+          pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+          pip install -r requirements-dev.txt
+          pip install -e .
+
+      - name: Lint
+        run: |
+          ruff check .
+          ruff format --check .
+
+      - name: Unit tests
+        run: pytest -q
+
+      - name: Pipeline smoke test (synthetic data)
+        run: |
+          python scripts/make_synthetic_data.py --dst data/synthetic
+          python -m liveness.train --config configs/smoke.yaml
+          python -m liveness.export --config configs/smoke.yaml \
+            --checkpoint runs/smoke/best.pt --out-dir models/smoke --enforce-budget
+          python -m liveness.evaluate --config configs/smoke.yaml \
+            --onnx models/smoke/model_int8.onnx --tag int8
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: smoke-artifacts
+          path: |
+            runs/smoke/*.json
+            runs/smoke/*.png
+            models/smoke/model_card.json

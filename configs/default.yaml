@@ -1,0 +1,31 @@
+seed: 42
+device: auto            # auto | cpu | cuda
+
+data:
+  root: data/processed  # contains train/ dev/ test/, each with live/ and spoof/
+  img_size: 224
+  num_workers: 4
+
+model:
+  name: mobilenet_v3_small   # mobilenet_v3_small | mobilenet_v3_large | mobilenet_v2
+  pretrained: true
+  dropout: 0.2
+  bn_momentum: 0.1
+
+train:
+  epochs: 20
+  batch_size: 64
+  lr: 0.0005
+  weight_decay: 0.0001
+  label_smoothing: 0.05
+  amp: true             # mixed precision, only used on CUDA
+  patience: 5           # early stopping on dev EER
+
+output:
+  dir: runs/baseline
+
+budget:                 # checked by `python -m liveness.export --enforce-budget`
+  max_params_m: 3.0
+  max_fp32_mb: 12.0
+  max_int8_mb: 4.0
+  max_p50_ms: 50.0      # single-thread CPU, batch 1
