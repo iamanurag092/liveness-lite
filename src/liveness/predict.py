@@ -1,6 +1,6 @@
 """Classify images as live or spoof with an exported ONNX model.
 
-    python -m liveness.predict face1.jpg face2.png --model models/model_fp32.onnx
+    python -m liveness.predict face1.jpg face2.png --model models/lite/model_fp32.onnx
 
 The model was trained on tightly cropped face images. By default each input is centre-cropped
 to a square, then resized exactly as during training (256 px Lanczos, then the model size).
@@ -74,7 +74,7 @@ def main() -> None:
         description=__doc__, formatter_class=argparse.RawTextHelpFormatter
     )
     parser.add_argument("images", nargs="+")
-    parser.add_argument("--model", default="models/model_fp32.onnx")
+    parser.add_argument("--model", default="models/lite/model_fp32.onnx")
     parser.add_argument("--card", help="model_card.json (default: next to the model)")
     parser.add_argument("--threshold", type=float, help="override the stored threshold")
     parser.add_argument("--no-center-crop", action="store_true")

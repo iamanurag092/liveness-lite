@@ -10,3 +10,6 @@ models/smoke/
 *.pt
 .DS_Store
 demo/samples/
+/models/*.onnx
+/models/model_card.json
+/models/quant_sweep/

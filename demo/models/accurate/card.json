@@ -5,9 +5,9 @@
   "gmacs": 0.2153,
   "fp32_onnx_mb": 16.81,
   "fp32_latency": {
-    "p50_ms": 6.37,
-    "p95_ms": 6.55,
-    "mean_ms": 6.39
+    "p50_ms": 5.91,
+    "p95_ms": 6.4,
+    "mean_ms": 5.95
   },
   "threshold": 0.3541,
   "dev_eer": 0.0255,

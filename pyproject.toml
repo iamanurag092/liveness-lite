@@ -22,6 +22,9 @@ src = ["src", "scripts", "tests"]
 [tool.ruff.lint]
 select = ["E", "F", "I", "B"]
 
+[tool.ruff.lint.per-file-ignores]
+"scripts/build_report.py" = ["E501"]  # long prose strings
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]

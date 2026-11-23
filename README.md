@@ -1,111 +1,84 @@
 # liveness-lite
 
-Lightweight deep-learning classifier that decides whether an input image is **genuine (live)** or
-**spoofed** (printed photo, screen replay, ...), built to stay small and fast: ImageNet-pretrained
-MobileNet backbone, single-logit head, exported to ONNX and quantised to INT8.
+A lightweight deep-learning classifier that decides whether an input image is a **genuine (live) face**
+or a **spoof** (printed photo or screen replay). Built for the Deep Algorithms Solutions take-home:
+*"classify input images as genuine or spoofed, with high accuracy and low computational cost and
+memory"*. Python/PyTorch for training, ONNX for deployment, and a browser demo that runs the model
+client-side.
 
-> Context: take-home task for Deep Algorithms Solutions - *"Develop a lightweight deep learning model
-> to classify input images as genuine or spoofed. High accuracy, low computational cost and memory."*
-
-## Status
-
-| Phase | What | State |
-|---|---|---|
-| 0 | Repo scaffold, training / evaluation / export code, tests, CI | done (code written; Done✅) |
-| 1 | Dataset chosen, downloaded, prepared, leakage-checked | **next** - see [docs/01_dataset.md](docs/01_dataset.md) |
-| 2 | Baseline training + evaluation | todo |
-| 3 | Ablations (image size, backbone, augmentation) | todo |
-| 4 | INT8 compression + budget gate | todo (code ready) |
-| 5 | Demo deployment + CD | todo |
-| 6 | Report and ZIP deliverable | todo |
-
-Full plan with acceptance criteria: [docs/PLAN.md](docs/PLAN.md).
-
-## Layout
-
-```
-configs/        default.yaml (real runs), smoke.yaml (CI, synthetic data)
-src/liveness/   data.py  model.py  metrics.py  train.py  evaluate.py  export.py  utils.py
-scripts/        prepare_data.py (raw dataset -> train/dev/test), make_synthetic_data.py
-tests/          metric maths (numpy) + model / data / end-to-end pipeline (torch, onnx)
-docs/           PLAN, dataset notes, methodology, experiment log, design decisions
-.github/        CI: lint, tests, synthetic-data smoke run, budget gate
-```
-
-## Setup
-
-Windows (PowerShell):
-```powershell
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-```
-macOS / Linux: `python -m venv .venv && source .venv/bin/activate`
-
-**GPU PyTorch.** `pip install torch` from the default index gives a CPU-only build on Windows
-(`torch.cuda.is_available()` prints `False`). For NVIDIA GPUs, get the exact command from
-https://pytorch.org/get-started/locally/ (OS: Windows, Package: Pip, then a CUDA option your
-driver supports; `nvidia-smi` shows the driver's CUDA version). Index URLs for old CUDA versions
-(for example `cu121`) can lack builds for current Python/torch versions, which shows up as
-"No matching distribution found". If a CPU build is already installed, remove it first:
-```powershell
-pip uninstall -y torch torchvision
-# run the command copied from pytorch.org here
-python -c "import torch; print(torch.__version__, torch.cuda.is_available())"   # want a +cuXXX suffix and True
-```
-Then the rest of the dependencies and the package itself:
-```powershell
-pip install -r requirements.txt -r requirements-dev.txt
-pip install -e .
-```
-No usable GPU? Training also runs on a free Kaggle or Colab GPU notebook; the code is unchanged.
-
-## Run
-
-```bash
-# 1. Prepare data (details and options: docs/01_dataset.md)
-python scripts/prepare_data.py --src <RAW_DIR> --dst data/processed --split-map training=train,development=dev,evaluation=test
-
-# 2. Train (best epoch chosen by dev EER)
-python -m liveness.train --config configs/default.yaml
-
-# 3. Evaluate: threshold is picked on dev, reported on test
-python -m liveness.evaluate --config configs/default.yaml --checkpoint runs/baseline/best.pt
-
-# 4. Export ONNX + INT8, verify parity, benchmark, check budget
-python -m liveness.export --config configs/default.yaml --checkpoint runs/baseline/best.pt --out-dir models --enforce-budget
-python -m liveness.evaluate --config configs/default.yaml --onnx models/model_int8.onnx --tag int8
-```
-
-Override any config value without editing files, e.g.
-`python -m liveness.train --override data.img_size=160 model.name=mobilenet_v2 output.dir=runs/mnv2_160`.
-
-Pipeline check without any real data (this is what CI runs):
-
-```bash
-python scripts/make_synthetic_data.py --dst data/synthetic
-python -m liveness.train --config configs/smoke.yaml
-```
+**Live demo:** _add the Vercel URL here after deploying (see docs/DEMO.md)_
+&nbsp;|&nbsp; **Report:** `report.pdf`
 
 ## Results
 
-Filled in after real runs - nothing below is measured yet.
+Dataset: LCC-FASD, official test split (389 live, 3,377 spoof; about 90% spoof, so accuracy is not the
+headline). Threshold chosen on the dev split. Cost: ONNX Runtime, one CPU thread, batch 1.
 
-| Model | Img | Params (M) | GMACs | Size MB | CPU p50 ms | Test ACER | Test AUC |
-|---|---|---|---|---|---|---|---|
-| MobileNetV3-Small FP32 | TBD | TBD | TBD | TBD | TBD | TBD | TBD |
-| MobileNetV3-Small INT8 | TBD | TBD | TBD | TBD | TBD | TBD | TBD |
+| Model | Backbone | Params | GMACs | ONNX size | CPU p50 | Test ACER | APCER | BPCER | AUC |
+|---|---|---|---|---|---|---|---|---|---|
+| **Lite** | MobileNetV3-Small | 1.52M | 0.056 | 6.1 MB | about 2 ms | 4.27% | 3.91% | 4.63% | 0.9941 |
+| **Accurate** | MobileNetV3-Large | 4.20M | 0.215 | 16.8 MB | about 6 ms | 3.02% | 2.96% | 3.08% | 0.9968 |
+
+APCER = attacks accepted as live, BPCER = live images rejected, ACER = their mean. Read
+[docs/03_experiments.md](docs/03_experiments.md) before quoting these numbers: single seed, the official
+split is not subject-disjoint, the dev set is small, the Accurate model was chosen with the test results
+in view, and INT8 quantisation was tried and failed (not shipped). All disclosed there and in `report.pdf`.
+
+## Quick start: classify an image
+
+```powershell
+pip install -r requirements.txt
+pip install -e .
+python -m liveness.predict path\to\cropped_face.png --model models/lite/model_fp32.onnx
+```
+Prints LIVE or SPOOF with the spoof score and the stored decision threshold. Inputs should be tightly
+cropped faces like the training data; other images give unreliable scores.
+
+## Reproduce everything
+
+```powershell
+python -m venv .venv ; .\.venv\Scripts\Activate.ps1
+# GPU users: install the CUDA build of PyTorch first (command from pytorch.org matching your driver)
+pip install -r requirements.txt -r requirements-dev.txt ; pip install -e .
+
+python scripts/dataset_download.py                      # Kaggle: aleksandrpikul222/lcc-fasd
+python scripts/prepare_lcc_fasd.py --src <LCC_FASD folder> --dst data/processed --resize 256
+python scripts/check_images.py --root data/processed --size 256
+
+python -m liveness.train --config configs/default.yaml --override output.dir=runs/E04_aug_basic train.epochs=8 train.patience=99 data.augment=basic
+python -m liveness.evaluate --config configs/default.yaml --checkpoint runs/E04_aug_basic/best.pt --run-dir runs/E04_aug_basic --tag fp32
+python -m liveness.export --config configs/default.yaml --checkpoint runs/E04_aug_basic/best.pt --out-dir models/lite --no-quant
+python scripts/run_experiments.py                       # the four ablations, evaluated
+python scripts/summarize_runs.py                        # docs/results_table.md
+python -m pytest -q                                     # unit and end-to-end tests
+```
+More commands: [docs/USAGE.md](docs/USAGE.md). Training from a spinning hard drive is very slow; keep
+the processed data on an SSD.
+
+## Repository layout
+
+```
+src/liveness/   data, model, metrics, train, evaluate, export, predict
+scripts/        dataset preparation and checks, experiment runner, report and demo builders
+configs/        default.yaml (real runs), smoke.yaml (CI)
+tests/          metrics, data, model, ONNX export, predictor, preparation scripts
+demo/           static browser demo (onnxruntime-web); models are copied in by scripts/make_demo_assets.py
+docs/           plan, dataset notes, methodology, experiment log, decisions, demo guide
+.github/        CI: lint, tests, synthetic end-to-end run, size budget, demo preprocessing test
+models/         exported ONNX models and model cards (lite, accurate)
+```
 
 ## Documentation
 
-- [docs/PLAN.md](docs/PLAN.md) - phases, checklists, acceptance criteria
-- [docs/01_dataset.md](docs/01_dataset.md) - candidate datasets, selection, layout, leakage rules
-- [docs/02_methodology.md](docs/02_methodology.md) - task definition, metrics, protocol, model, compression
-- [docs/03_experiments.md](docs/03_experiments.md) - experiment log (one row per run)
-- [docs/DECISIONS.md](docs/DECISIONS.md) - why things are built the way they are
+- [docs/01_dataset.md](docs/01_dataset.md): dataset, preparation, leakage findings, data integrity
+- [docs/02_methodology.md](docs/02_methodology.md): task definition, metrics, protocol, model
+- [docs/03_experiments.md](docs/03_experiments.md): experiment log, findings, model selection disclosure
+- [docs/DECISIONS.md](docs/DECISIONS.md): design decisions and why
+- [docs/DEMO.md](docs/DEMO.md): browser demo, local preview, Vercel deployment
+- [docs/PLAN.md](docs/PLAN.md): phases and status
 
-## Deliverable ZIP
+## Limits, briefly
 
-```bash
-git archive --format=zip --output=submission.zip HEAD   # tracked files only
-# then add the trained models (models/*.onnx), report PDF and any result plots, and send via Reply All
-```
+Within-dataset results only (no cross-dataset test); 12 subject ids appear in both official train/dev and
+test; single seed per run; the model expects cropped faces; latency is from one laptop. The dataset images
+are photos of real people and are not redistributed here.

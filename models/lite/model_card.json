@@ -5,11 +5,11 @@
   "gmacs": 0.0555,
   "fp32_onnx_mb": 6.09,
   "fp32_latency": {
-    "p50_ms": 2.3,
-    "p95_ms": 3.08,
-    "mean_ms": 2.38
+    "p50_ms": 1.92,
+    "p95_ms": 2.49,
+    "mean_ms": 2.02
   },
-  "fp32_max_abs_diff_vs_torch": 2.980232238769531e-07,
+  "fp32_max_abs_diff_vs_torch": 2.384185791015625e-07,
   "threshold": 0.2512,
   "dev_eer": 0.0175,
   "input": "float32 RGB in [0,1], shape (N,3,H,W)",

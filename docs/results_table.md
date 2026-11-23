@@ -10,4 +10,3 @@ Test metrics use the threshold chosen on dev. Selection of the final model is by
 | E03_img160 | mobilenet_v3_small | 160 | full | 8 | 1.52 | 0.029 | 0.0426 (ep 6) | 0.0551 | 0.0897 | 0.0206 | 0.9931 |
 | E04_aug_basic | mobilenet_v3_small | 224 | basic | 8 | 1.52 | 0.055 | 0.0175 (ep 6) | 0.0427 | 0.0391 | 0.0463 | 0.9941 |
 | E05_mnv3_large | mobilenet_v3_large | 224 | full | 8 | 4.20 | 0.215 | 0.0255 (ep 2) | 0.0302 | 0.0296 | 0.0308 | 0.9968 |
-| smoke | mobilenet_v3_small | 96 | full | 6 | 1.52 | 0.011 | 0.2083 (ep 6) | - | - | - | - |

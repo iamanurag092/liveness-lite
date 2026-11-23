@@ -26,6 +26,8 @@ def main() -> None:
     )
     lines = [header]
     for run_dir in sorted(Path(args.runs).iterdir()):
+        if run_dir.name == "smoke":  # CI pipeline check, not a result
+            continue
         history, config = run_dir / "history.json", run_dir / "config.yaml"
         if not (history.is_file() and config.is_file()):
             continue
