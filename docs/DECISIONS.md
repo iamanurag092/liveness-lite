@@ -40,3 +40,14 @@ Short records of choices and why. Add a new entry when a choice changes.
     silently scored at 224 px.
 15. **The decision threshold travels with the model.** `export.py` stores the dev-EER threshold in
     `model_card.json`; `predict.py` and the demo read it from there.
+16. **INT8 sweep is opt-in and memory-bounded.** The first overnight run froze the laptop about five
+    minutes in, most likely because histogram calibration (percentile/entropy) holds all layer outputs
+    of all calibration batches in RAM and was fed batches of 128 images. Those recipes now use batches
+    of 4, partial results are saved after every recipe, and the ablation runner no longer includes the
+    sweep unless `--with-sweep` is given.
+17. **Two released models: Lite and Accurate.** Lite = E04 (MobileNetV3-Small), Accurate = E05
+    (MobileNetV3-Large). The dev split cannot rank close models, so the selection is disclosed as
+    test-informed (docs/03_experiments.md). Releasing both shows the accuracy/cost trade-off honestly.
+18. **No dataset images in the deployed demo.** LCC-FASD contains photos of real people with unclear
+    redistribution terms. Sample images are optional, local only and git-ignored; the public demo
+    classifies only what the visitor uploads, in their own browser.

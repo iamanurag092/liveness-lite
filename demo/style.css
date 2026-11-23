@@ -1,0 +1,43 @@
+:root {
+  --bg: #fafaf9; --fg: #1c1917; --muted: #6b6560; --card: #ffffff; --line: #e2dfdb;
+  --live: #1b7f5c; --spoof: #b4472a; --accent: #3b5bdb;
+}
+@media (prefers-color-scheme: dark) {
+  :root { --bg: #151413; --fg: #f2efeb; --muted: #a39d96; --card: #1f1d1b; --line: #36322f;
+    --live: #4cc9a0; --spoof: #ee8b6c; --accent: #8fa4ff; }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--fg);
+  font: 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+main { max-width: 720px; margin: 0 auto; padding: 32px 16px 64px; }
+h1 { margin: 0 0 8px; font-size: 2rem; }
+h2 { margin: 0 0 12px; font-size: 1rem; text-transform: uppercase; letter-spacing: .05em;
+  color: var(--muted); }
+.lead { color: var(--muted); margin-top: 0; }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: 12px;
+  padding: 16px; margin: 16px 0; }
+.tiers { display: flex; gap: 8px; flex-wrap: wrap; }
+.tiers label { border: 1px solid var(--line); border-radius: 999px; padding: 6px 14px; cursor: pointer; }
+.tiers input { margin-right: 6px; }
+.tiers label:has(input:checked) { border-color: var(--accent); color: var(--accent); }
+.muted { color: var(--muted); font-size: .9rem; margin: 8px 0 0; }
+.drop { display: block; padding: 32px 16px; text-align: center; border: 2px dashed var(--line);
+  border-radius: 12px; cursor: pointer; }
+.drop:hover, .drop.over, .drop:focus { border-color: var(--accent); outline: none; }
+.samples { display: grid; grid-template-columns: repeat(auto-fill, minmax(72px, 1fr)); gap: 8px;
+  margin-top: 12px; }
+.samples button { padding: 0; border: 1px solid var(--line); border-radius: 8px; overflow: hidden;
+  background: none; cursor: pointer; }
+.samples img { display: block; width: 100%; aspect-ratio: 1; object-fit: cover; }
+.result { display: flex; gap: 20px; flex-wrap: wrap; align-items: flex-start; }
+#preview { width: 224px; height: 224px; border-radius: 8px; background: #888; }
+.out { flex: 1; min-width: 220px; }
+.badge { display: inline-block; font-size: 1.6rem; font-weight: 700; padding: 4px 16px;
+  border-radius: 8px; border: 2px solid currentColor; }
+.badge.live { color: var(--live); } .badge.spoof { color: var(--spoof); }
+.bar { position: relative; height: 10px; border-radius: 5px; margin-top: 16px;
+  background: linear-gradient(90deg, var(--live), var(--line) 50%, var(--spoof)); }
+.fill { position: absolute; top: -4px; width: 4px; height: 18px; background: var(--fg);
+  border-radius: 2px; transform: translateX(-2px); }
+.tick { position: absolute; top: -8px; width: 0; height: 26px; border-left: 2px dashed var(--muted); }
+.note { color: var(--muted); font-size: .85rem; margin-top: 32px; }

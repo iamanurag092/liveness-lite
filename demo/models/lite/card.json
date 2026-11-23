@@ -1,0 +1,15 @@
+{
+  "backbone": "mobilenet_v3_small",
+  "img_size": 224,
+  "params_m": 1.519,
+  "gmacs": 0.0555,
+  "fp32_onnx_mb": 6.09,
+  "fp32_latency": {
+    "p50_ms": 2.3,
+    "p95_ms": 3.08,
+    "mean_ms": 2.38
+  },
+  "threshold": 0.2512,
+  "dev_eer": 0.0175,
+  "tier": "lite"
+}

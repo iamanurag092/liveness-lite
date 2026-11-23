@@ -9,3 +9,4 @@ runs/
 models/smoke/
 *.pt
 .DS_Store
+demo/samples/

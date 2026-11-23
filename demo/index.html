@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>liveness-lite: live or spoof?</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main>
+    <h1>Live or spoof?</h1>
+    <p class="lead">Upload a tightly cropped face photo. A small neural network decides whether it is a
+      genuine face or a presentation attack (print or screen). It runs in your browser; the image never
+      leaves your device.</p>
+
+    <section class="card" aria-labelledby="model-h">
+      <h2 id="model-h">Model</h2>
+      <div id="tiers" class="tiers" role="radiogroup" aria-label="Model size"></div>
+      <p id="model-info" class="muted">Loading model list&hellip;</p>
+    </section>
+
+    <section class="card">
+      <label id="drop" class="drop" tabindex="0">
+        <input id="file" type="file" accept="image/*" hidden>
+        <strong>Choose an image</strong> or drop one here
+      </label>
+      <div id="samples" class="samples" hidden></div>
+    </section>
+
+    <section id="result" class="card result" hidden aria-live="polite">
+      <canvas id="preview" width="224" height="224"></canvas>
+      <div class="out">
+        <div id="badge" class="badge">&nbsp;</div>
+        <div class="bar"><div id="fill" class="fill"></div><div id="tick" class="tick"></div></div>
+        <p id="detail" class="muted"></p>
+        <p id="reference" class="muted"></p>
+      </div>
+    </section>
+
+    <p id="status" class="muted" role="status"></p>
+
+    <p class="note">Trained on LCC-FASD (cropped face images from many phone cameras). Whole-scene
+      photos, other cameras or unseen attack types can give unreliable scores. This is a research
+      prototype, not a security product.</p>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.22.0/dist/ort.min.js"></script>
+  <script src="preprocess.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

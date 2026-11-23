@@ -33,6 +33,9 @@ jobs:
       - name: Unit tests
         run: pytest -q
 
+      - name: Demo preprocessing test
+        run: node demo/preprocess.test.js
+
       - name: Pipeline smoke test (synthetic data)
         run: |
           python scripts/make_synthetic_data.py --dst data/synthetic
