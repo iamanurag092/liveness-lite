@@ -1,5 +1,8 @@
 # Browser demo
 
+**Live:** https://liveness-lite-demo.vercel.app/ (Vercel project with Root Directory `demo`;
+redeploys on every push to `main`).
+
 A static page (`demo/`) that classifies an uploaded image **entirely in the browser** with
 `onnxruntime-web` (WebAssembly). No server, no GPU, and the image never leaves the user's device.
 

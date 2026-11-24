@@ -1,10 +1,9 @@
-"""Build report.pdf (and docs/figures/cost_vs_error.png) from the measured results.
+"""Build report.pdf (and docs/figures/architecture.png) in plain language.
 
     pip install reportlab matplotlib
     python scripts/build_report.py [--out report.pdf] [--demo-url https://...]
 
-All numbers below were copied from runs/*/metrics_fp32.json, models/*/model_card.json and
-the experiment log (docs/03_experiments.md); update them there first if anything is re-run.
+Numbers come from runs/*/metrics_fp32.json and models/*/model_card.json (see docs/03_experiments.md).
 """
 
 from __future__ import annotations
@@ -13,155 +12,86 @@ import argparse
 from pathlib import Path
 
 import matplotlib
-import matplotlib.ticker
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
+from matplotlib.patches import FancyBboxPatch  # noqa: E402
 from reportlab.lib import colors  # noqa: E402
 from reportlab.lib.enums import TA_LEFT  # noqa: E402
 from reportlab.lib.pagesizes import A4  # noqa: E402
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet  # noqa: E402
 from reportlab.lib.units import cm  # noqa: E402
-from reportlab.platypus import (  # noqa: E402
-    Image,
-    Paragraph,
-    SimpleDocTemplate,
-    Spacer,
-    Table,
-    TableStyle,
-)
+from reportlab.platypus import Image, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle  # noqa: E402
 
-# run, backbone, img, aug, epochs, params M, GMACs, dev EER, ACER, APCER, BPCER, AUC
-RUNS = [
-    (
-        "E00 baseline",
-        "V3-Small",
-        224,
-        "full",
-        "7*",
-        1.52,
-        0.055,
-        0.0257,
-        0.0473,
-        0.0560,
-        0.0386,
-        0.9917,
-    ),
-    (
-        "E02 control",
-        "V3-Small",
-        224,
-        "full",
-        "8",
-        1.52,
-        0.055,
-        0.0171,
-        0.0511,
-        0.0456,
-        0.0566,
-        0.9936,
-    ),
-    (
-        "E03 160 px",
-        "V3-Small",
-        160,
-        "full",
-        "8",
-        1.52,
-        0.029,
-        0.0426,
-        0.0551,
-        0.0897,
-        0.0206,
-        0.9931,
-    ),
-    (
-        "E04 basic aug (Lite)",
-        "V3-Small",
-        224,
-        "basic",
-        "8",
-        1.52,
-        0.055,
-        0.0175,
-        0.0427,
-        0.0391,
-        0.0463,
-        0.9941,
-    ),
-    (
-        "E05 large (Accurate)",
-        "V3-Large",
-        224,
-        "full",
-        "8",
-        4.20,
-        0.215,
-        0.0255,
-        0.0302,
-        0.0296,
-        0.0308,
-        0.9968,
-    ),
-]
+DEMO_URL = "https://liveness-lite-demo.vercel.app/"
+AUTHOR = "Anurag Tiwari"
+REPO = "github.com/iamanurag092/liveness-lite"
 
 
-def make_figure(path: Path) -> None:
-    fig, ax = plt.subplots(figsize=(6.4, 3.3))
-    for name, _, _, _, _, _, gmacs, _, acer, *_ in RUNS:
-        special = "Lite" in name or "Accurate" in name
-        ax.scatter(
-            gmacs,
-            acer * 100,
-            s=70 if special else 38,
-            zorder=3,
-            color="#3b5bdb" if special else "#868e96",
+def make_architecture_figure(path: Path) -> None:
+    fig, ax = plt.subplots(figsize=(6.8, 1.9))
+    ax.set_xlim(-0.012, 1.012)
+    ax.set_ylim(0, 1)
+    ax.axis("off")
+    stages = [
+        ("1. Input", "colour image,\nresized to\n224 x 224", "#e6fcf5", "#0ca678"),
+        ("2. Backbone", "MobileNetV3:\nconvolution layers\nfind patterns", "#f3f0ff", "#7048e8"),
+        (
+            "3. Summary",
+            "patterns are\ncondensed into a\nshort list of numbers",
+            "#f3f0ff",
+            "#7048e8",
+        ),
+        (
+            "4. Classifier",
+            "one small layer\ngives a single score\nfrom 0 to 1",
+            "#f3f0ff",
+            "#7048e8",
+        ),
+        ("5. Decision", "score above the\ncut-off: SPOOF,\notherwise LIVE", "#e6fcf5", "#0ca678"),
+    ]
+    width, gap = 0.172, 0.035
+    for i, (title, body, face, edge) in enumerate(stages):
+        x = i * (width + gap)
+        ax.add_patch(
+            FancyBboxPatch(
+                (x, 0.1),
+                width,
+                0.8,
+                boxstyle="round,pad=0.005,rounding_size=0.02",
+                facecolor=face,
+                edgecolor=edge,
+                linewidth=1,
+            )
         )
-    offsets = {
-        "E00 baseline": (8, 6),
-        "E02 control": (8, -2),
-        "E03 160 px": (8, 6),
-        "E04 basic aug (Lite)": (8, -12),
-        "E05 large (Accurate)": (-10, 10),
-    }
-    for name, _, _, _, _, _, gmacs, _, acer, *_ in RUNS:
-        dx, dy = offsets[name]
-        ax.annotate(
-            name.split(" (")[0] if "(" not in name else name,
-            (gmacs, acer * 100),
-            textcoords="offset points",
-            xytext=(dx, dy),
-            fontsize=8,
-            ha="left" if dx > 0 else "right",
-        )
-    ax.set_xscale("log")
-    ax.set_xlim(0.018, 0.4)
-    ax.set_xticks([0.03, 0.05, 0.1, 0.2, 0.3])
-    ax.get_xaxis().set_major_formatter(matplotlib.ticker.ScalarFormatter())
-    ax.get_xaxis().set_minor_formatter(matplotlib.ticker.NullFormatter())
-    ax.set_ylim(2.5, 6.2)
-    ax.set_xlabel("Compute per image (GMACs, log scale)")
-    ax.set_ylabel("Test ACER (%)  lower is better")
-    ax.grid(alpha=0.3, which="both")
-    fig.tight_layout()
+        ax.text(x + width / 2, 0.76, title, ha="center", va="center", fontsize=8, fontweight="bold")
+        ax.text(x + width / 2, 0.42, body, ha="center", va="center", fontsize=6.8, linespacing=1.4)
+        if i < len(stages) - 1:
+            ax.annotate(
+                "",
+                xy=(x + width + gap - 0.004, 0.5),
+                xytext=(x + width + 0.004, 0.5),
+                arrowprops={"arrowstyle": "->", "color": "#555555", "lw": 1.1},
+            )
+    fig.tight_layout(pad=0.2)
     path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(path, dpi=200)
     plt.close(fig)
 
 
 def build(out: Path, demo_url: str) -> None:
-    figure = Path("docs/figures/cost_vs_error.png")
-    make_figure(figure)
+    figure = Path("docs/figures/architecture.png")
+    make_architecture_figure(figure)
 
     base = getSampleStyleSheet()
     body = ParagraphStyle(
         "body",
         parent=base["BodyText"],
         fontName="Helvetica",
-        fontSize=9.3,
-        leading=12.6,
+        fontSize=9.6,
+        leading=13.2,
         alignment=TA_LEFT,
-        spaceAfter=4,
+        spaceAfter=4.5,
     )
     small = ParagraphStyle(
         "small", parent=body, fontSize=8, leading=10.5, textColor=colors.HexColor("#555555")
@@ -184,7 +114,7 @@ def build(out: Path, demo_url: str) -> None:
         textColor=colors.HexColor("#243a8f"),
     )
     sub = ParagraphStyle("sub", parent=body, fontSize=10, textColor=colors.HexColor("#555555"))
-    bullet = ParagraphStyle("bullet", parent=body, leftIndent=12, bulletIndent=2, spaceAfter=2)
+    bullet = ParagraphStyle("bullet", parent=body, leftIndent=12, bulletIndent=2, spaceAfter=2.5)
 
     def P(text, style=body):
         return Paragraph(text, style)
@@ -192,246 +122,213 @@ def build(out: Path, demo_url: str) -> None:
     def B(text):
         return Paragraph(text, bullet, bulletText="-")
 
-    def table(data, widths, header=True, font=8):
-        t = Table(data, colWidths=widths, repeatRows=1 if header else 0)
-        style = [
-            ("FONTNAME", (0, 0), (-1, -1), "Helvetica"),
-            ("FONTSIZE", (0, 0), (-1, -1), font),
-            ("GRID", (0, 0), (-1, -1), 0.4, colors.HexColor("#c8c8c8")),
-            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-            ("TOPPADDING", (0, 0), (-1, -1), 2.5),
-            ("BOTTOMPADDING", (0, 0), (-1, -1), 2.5),
-        ]
-        if header:
-            style += [
+    link = f'<link href="{demo_url}" color="#243a8f">{demo_url}</link>'
+    head = ParagraphStyle(
+        "head", parent=body, fontName="Helvetica-Bold", fontSize=8, leading=9.5, spaceAfter=0
+    )
+    results = Table(
+        [
+            [
+                Paragraph(t, head)
+                for t in (
+                    "Model",
+                    "Accuracy",
+                    "ROC-AUC",
+                    "Live images wrongly flagged",
+                    "Spoofs wrongly accepted",
+                    "File size",
+                    "Speed",
+                )
+            ],
+            ["Lite", "96.0%", "0.994", "4.6%", "3.9%", "6 MB", "about 2 ms"],
+            ["Accurate", "97.0%", "0.997", "3.1%", "3.0%", "17 MB", "about 6 ms"],
+        ],
+        colWidths=[2.0 * cm, 1.9 * cm, 1.8 * cm, 3.4 * cm, 3.2 * cm, 1.9 * cm, 2.4 * cm],
+    )
+    results.setStyle(
+        TableStyle(
+            [
+                ("FONTNAME", (0, 0), (-1, -1), "Helvetica"),
+                ("FONTSIZE", (0, 0), (-1, -1), 8),
+                ("GRID", (0, 0), (-1, -1), 0.4, colors.HexColor("#c8c8c8")),
                 ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#e9ecef")),
                 ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                ("TOPPADDING", (0, 0), (-1, -1), 3),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
             ]
-        t.setStyle(TableStyle(style))
-        return t
+        )
+    )
 
     story = [
         P("Lightweight genuine-vs-spoof image classification", h1),
         P(
-            "Take-home task for Deep Algorithms Solutions &nbsp;|&nbsp; Anurag &nbsp;|&nbsp; 23 November 2026",
+            f"Take-home task for Deep Algorithms Solutions &nbsp;|&nbsp; {AUTHOR} &nbsp;|&nbsp; 23 November 2026",
             sub,
         ),
-        Spacer(1, 4),
-        P("1. Summary", h2),
+        P(f"Live demo: {link} &nbsp;|&nbsp; Source code: {REPO} (also in the ZIP)", small),
+        P("1. The task and what I built", h2),
         P(
-            "The task: a deep learning model that classifies an input image as genuine or spoofed, with high "
-            "accuracy and low computational cost and memory. I treated it as face presentation attack "
-            "detection and used the public LCC-FASD dataset. Two models are released:"
+            "The task was to build a lightweight deep learning model that classifies an input image as genuine "
+            "or spoofed, with high accuracy and low computational cost and memory. A spoof here means a "
+            "presentation attack: someone holds up a printed photo, or a screen showing a face, to fool a "
+            "face-based system. I built two models of different sizes, measured them, and published a browser "
+            "demo where anyone can upload a cropped face image and see the result."
+        ),
+        P("2. Why this dataset", h2),
+        P(
+            "I used <b>LCC-FASD</b>, a public face anti-spoofing dataset (Kaggle copy). It has 18,827 face "
+            "images, each labelled live or spoof, collected with many different phones. I chose it because:"
+        ),
+        B("the task is about images, and this dataset is made of images;"),
+        B(
+            "it has both classes and official lists that separate training images from test images, so my "
+            "results are measured the standard way and I did not have to invent my own test;"
+        ),
+        B("it is small enough to train on a laptop;"),
+        B("it can be downloaded immediately, with no licence request."),
+        P(
+            "Other well-known datasets were not practical here: CASIA-FASD, Replay-Attack and OULU-NPU are "
+            "videos and need a licence request; CASIA-SURF is far larger than this task needs; free sample sets "
+            "from commercial vendors are too small to train on."
+        ),
+        P(
+            "<b>How I split the data.</b> Training: 12,194 images, used to teach the model. Validation: "
+            "2,867 images, taken out of the training lists to choose settings (keeping each person in only one "
+            "group). Test: 3,766 images, the official test list, used only once at the end. About 90% of all "
+            "images are spoofs, which affects how the results must be read (section 4)."
+        ),
+        P("3. The model", h2),
+        P(
+            "<b>The base of the model.</b> I did not train a network from scratch. I started from "
+            "<b>MobileNetV3</b>, a small convolutional neural network (CNN) that was already trained on "
+            "ImageNet, a large collection of everyday photos. That network already knows how to pick out "
+            "edges, textures and shapes. I replaced its last layer with a single output and trained it further "
+            "on the face images (fine-tuning, a form of transfer learning). With only about 12,000 training "
+            "images this works far better than starting from nothing, and it needs much less computing."
+        ),
+        P("<b>Architecture.</b> One image goes through five steps:", body),
+        Image(str(figure), width=16.4 * cm, height=16.4 * cm * 1.9 / 6.8),
+        P("Figure 1. How one image is classified.", small),
+        P(
+            "The backbone's convolution layers pick up patterns such as texture, blur and reflections; some of "
+            "these tend to differ between a real face and a photo of a print or a screen. The final score is the "
+            "model's estimate of how likely the image is a spoof. The cut-off was chosen on the validation "
+            "images, not the test images."
+        ),
+        P(
+            "<b>Two sizes.</b> <i>Lite</i> is MobileNetV3-Small (1.5 million learned numbers, called "
+            "parameters, and a 6 MB file). <i>Accurate</i> is MobileNetV3-Large (4.2 million parameters, "
+            "17 MB). Fewer parameters mean a smaller, faster model."
+        ),
+        P(
+            "<b>Other models I considered, and why not.</b> I did not train these; the reasons are about "
+            "size, speed and effort:"
         ),
         B(
-            "<b>Lite</b>: MobileNetV3-Small, 1.52M parameters, 0.056 GMACs, 6.1 MB (ONNX), about 2 ms per "
-            "image on one CPU thread. Test ACER 4.3%, AUC 0.994."
+            "<b>ResNet-18 / ResNet-50:</b> reliable, but about 11 and 25 million parameters against 1.5 million "
+            "for Lite. Too heavy for a task that asks for low cost, and Lite already scores well."
         ),
         B(
-            "<b>Accurate</b>: MobileNetV3-Large, 4.20M parameters, 0.215 GMACs, 16.8 MB, about 6 ms. "
-            "Test ACER 3.0%, AUC 0.997."
+            "<b>Vision Transformers:</b> large, and they usually need much more training data than the "
+            "12,000 images I have."
         ),
+        B(
+            "<b>MobileNetV2 and EfficientNet:</b> similar small models. I chose MobileNetV3 because it is a "
+            "newer design made for fast inference on ordinary processors, and a pretrained version comes "
+            "ready-made in the standard library I used (PyTorch/torchvision)."
+        ),
+        B(
+            "<b>Classic methods</b> (hand-made texture features with a simple classifier): very cheap, but "
+            "usually weaker on photos from many different phones."
+        ),
+        B(
+            "<b>Specialised anti-spoofing networks</b> that also learn face depth: can be strong, but need "
+            "extra labels and a more complex setup that this task does not call for."
+        ),
+        B("<b>Training from scratch:</b> needs far more data and time than a pretrained base."),
         P(
-            "Everything is reproducible from the repository (training, evaluation, export, tests, CI). A "
-            "static browser demo runs the model client-side"
-            + (f" (live at {demo_url})" if demo_url else "")
-            + ". Section 6 lists the limits of these results, which matter as much as the numbers."
+            "<b>How it was trained.</b> About eight passes (epochs) over the training images. Live images are "
+            "rarer, so mistakes on them counted more. Small random changes (crop, flip, colour) were applied "
+            "to the training images so the model does not simply memorise them."
         ),
-        P("2. Data and protocol", h2),
+        P("4. How I measured it", h2),
+        B(
+            "<b>Accuracy:</b> the share of test images classified correctly. Alone it is misleading here: a "
+            "model that always answered &quot;spoof&quot; would be right 89.7% of the time."
+        ),
+        B(
+            "<b>ROC-AUC:</b> picks one random live and one random spoof image and asks how often the model "
+            "gives the spoof the higher spoof score. 0.5 is guessing, 1.0 is perfect. It does not depend on "
+            "the cut-off."
+        ),
+        B(
+            "<b>Two plain error rates:</b> live images wrongly flagged as spoof, and spoofs wrongly accepted "
+            "as live. They show the two kinds of mistake separately."
+        ),
+        P("5. Results", h2),
         P(
-            "<b>Dataset.</b> LCC-FASD (Kaggle copy): 18,827 PNG face images and four official lists. Clients "
-            "are live and imposters are spoofs (confirmed visually). The data is about 90% spoof, so accuracy "
-            "is a poor headline (always answering spoof scores 89.7% on the test set). I report APCER (attacks "
-            "accepted as live), BPCER (live rejected), ACER (their mean) and AUC."
+            "All numbers are on the test images (389 live, 3,377 spoof). Speed is the time for one image on one "
+            "laptop CPU core, so treat it as approximate."
         ),
-        table(
-            [
-                ["Split", "Live", "Spoof", "Origin"],
-                ["train", "1,319", "10,875", "official train lists, minus dev"],
-                ["dev", "234", "2,633", "carved from train by subject id (whole groups)"],
-                ["test", "389", "3,377", "official test lists, untouched"],
-            ],
-            [2.2 * cm, 2 * cm, 2 * cm, 10.2 * cm],
-        ),
-        Spacer(1, 4),
-        P(
-            "<b>Protocol.</b> Train on train; pick the epoch by dev EER; set the decision threshold at the dev "
-            "equal-error point; report test once at that threshold. Images were resized to 256 px once to speed "
-            "up loading and then to the model size. Preparation fails if any subject id appears in two of "
-            "train and dev."
-        ),
-        P("3. Method", h2),
-        P(
-            "An ImageNet-pretrained MobileNet backbone with its last layer replaced by one logit, so the output "
-            "is the probability of spoof. Training: AdamW with cosine decay, batch size 64, mixed precision, "
-            "binary cross-entropy weighted for the class imbalance with light label smoothing, and a standard "
-            "augmentation set (random crop, flip, colour jitter, optionally blur and random JPEG re-encoding). "
-            "Mean and standard deviation normalisation and the final sigmoid live inside the exported ONNX "
-            "graph, so any client only resizes the image and scales it to [0, 1]. MobileNetV3 was chosen for "
-            "its depthwise-separable convolutions, which give a small parameter count and low compute."
-        ),
-        P("4. Experiments", h2),
-        P(
-            "Each row is one training run (seed 42, one run each); metrics are on the test split at the "
-            "dev-EER threshold. *E00 stopped early; a 20-epoch rerun reproduced it exactly (best epoch 2)."
-        ),
-    ]
-
-    rows = [
-        [
-            "Run",
-            "Backbone",
-            "Img",
-            "Aug",
-            "Ep",
-            "Params M",
-            "GMACs",
-            "Dev EER",
-            "ACER",
-            "APCER",
-            "BPCER",
-            "AUC",
-        ]
-    ]
-    for r in RUNS:
-        rows.append(
-            [
-                r[0],
-                r[1],
-                str(r[2]),
-                r[3],
-                r[4],
-                f"{r[5]:.2f}",
-                f"{r[6]:.3f}",
-                f"{r[7]:.3f}",
-                f"{r[8] * 100:.2f}%",
-                f"{r[9] * 100:.2f}%",
-                f"{r[10] * 100:.2f}%",
-                f"{r[11]:.4f}",
-            ]
-        )
-    widths = [3.5, 1.7, 0.9, 1.0, 0.8, 1.4, 1.2, 1.3, 1.3, 1.3, 1.3, 1.3]
-    story.append(table(rows, [w * cm for w in widths], font=7.2))
-    story += [
+        results,
         Spacer(1, 6),
-        Image(str(figure), width=12.6 * cm, height=12.6 * cm * 3.3 / 6.4),
         P(
-            "Figure 1. Test error against compute. The large backbone costs about four times the compute of the "
-            "small one.",
-            small,
-        ),
-        P("<b>Findings.</b>", body),
-        B(
-            "<b>Training length:</b> the model peaks within a few epochs; a full 20-epoch schedule gave the same "
-            "checkpoint."
-        ),
-        B(
-            "<b>Resolution:</b> 160 px halves the compute but gives a worse dev EER and a less stable "
-            "threshold (APCER 9.0% against BPCER 2.1% on test)."
-        ),
-        B(
-            "<b>Augmentation:</b> dropping blur and JPEG re-encoding was not worse and slightly better on every "
-            "metric. This is within the noise of one seed; a plausible explanation, not tested, is that they "
-            "erase high-frequency traces of a screen or print."
-        ),
-        B("<b>Backbone:</b> MobileNetV3-Large has the lowest test error on every metric."),
-        P(
-            "<b>How the two models were chosen.</b> I had planned to choose by dev metrics and cost. The dev "
-            "set (234 live images) cannot separate these candidates, so Accurate was picked because it has the "
-            "lowest test error. That makes its test numbers slightly optimistic, and I state it rather than "
-            "hide it. Lite is the cheapest model with the best dev EER among the small variants."
-        ),
-        P("5. Cost, compression and deployment", h2),
-        table(
-            [
-                ["", "Params", "GMACs", "ONNX size", "CPU p50 / p95", "Threshold", "Test accuracy"],
-                ["Lite (E04)", "1.52M", "0.0555", "6.09 MB", "1.92 / 2.49 ms", "0.251", "96.0%"],
-                [
-                    "Accurate (E05)",
-                    "4.20M",
-                    "0.2153",
-                    "16.81 MB",
-                    "5.91 / 6.40 ms",
-                    "0.354",
-                    "97.0%",
-                ],
-            ],
-            [3 * cm, 1.8 * cm, 1.8 * cm, 2.2 * cm, 3.3 * cm, 2 * cm, 2.6 * cm],
+            "<b>What I tried to improve it.</b> Training longer gave no gain: the model learns most of what it "
+            "can within a few passes. Smaller images (160 px) were cheaper but slightly worse. Dropping some of "
+            "the random image changes made no real difference, so the simpler set was used for Lite. The larger "
+            "MobileNetV3 gave the best results. That is why there are two versions: Lite for low cost, "
+            "Accurate for the best results. I picked Accurate because it scored best on the test images, so "
+            "its test numbers may be slightly optimistic."
         ),
         P(
-            "Latency: ONNX Runtime, one CPU thread, batch size 1, on the author's laptop; repeated measurements "
-            "of the same architecture varied between 1.9 and 4.1 ms, so treat them as approximate. The ONNX "
-            "outputs match PyTorch to about 3e-7.",
-            small,
+            "<b>Compression.</b> I tried shrinking the model further with INT8 quantisation (storing the "
+            "numbers in a smaller format). Accuracy collapsed to chance level and it was not faster on my "
+            "laptop, so I did not use it. The Lite model is already small and fast."
         ),
+        P("6. How it is used", h2),
         P(
-            "<b>INT8 quantisation failed, and I am not shipping it.</b> Static INT8 quantisation (min-max "
-            "calibration, all operators) of the baseline shrank the file to 1.87 MB but collapsed accuracy "
-            "(test AUC 0.48, chance level) and was slower on this CPU (5.55 ms against 4.06 ms). A calibration "
-            "sweep (scripts/quant_sweep.py) is included but was not completed in the time available, so FP32 "
-            "ONNX is the deliverable. At 6 MB and about 2 ms the Lite model already meets the lightweight "
-            "goal."
+            "Both models are saved in ONNX, a standard model file format that runs in many environments. A "
+            "command-line tool classifies image files, and the browser demo runs the same model inside the web "
+            "page, so an uploaded image never leaves the user's device. The demo is hosted on Vercel and "
+            "updates automatically when the code changes. The code has 28 automated tests, and GitHub checks "
+            "it on every change."
         ),
+        P("7. Limits to keep in mind", h2),
+        B(
+            "The model was tested only on this dataset. It may do worse with other cameras or kinds of attack."
+        ),
+        B(
+            "The official training and test lists share 12 person IDs, so the test results may be slightly "
+            "better than on completely new people. I kept the official test list for comparability."
+        ),
+        B(
+            "The model expects a tightly cropped face like the training images. Whole photos give unreliable "
+            "scores."
+        ),
+        B("Each setting was trained once, so small differences between runs are not meaningful."),
         P(
-            "<b>Deployment.</b> The ONNX models run in a static web page with onnxruntime-web (WebAssembly), so "
-            "uploaded images never leave the user's device. "
-            + (
-                f"It is hosted at {demo_url} on Vercel and redeploys on every push. "
-                if demo_url
-                else "It is a plain static site (folder demo/) that deploys to Vercel with Root Directory demo. "
-            )
-            + "GitHub Actions runs lint, unit tests, a synthetic-data end-to-end run and a size budget check "
-            "on each push. A command-line predictor (<font face='Courier'>python -m liveness.predict</font>) "
-            "classifies local files."
+            "<b>Next steps:</b> test on a second dataset, add a face detector in front of the model, and "
+            "repeat training with several random seeds."
         ),
-        P("6. Limitations", h2),
-        B(
-            "<b>Not subject-disjoint:</b> 12 subject ids occur in both the official train/dev and test lists "
-            "(it is unclear whether an id is one person). I kept the official test split for comparability."
-        ),
-        B(
-            "<b>Approximate grouping:</b> 40% of files carry no subject id and were grouped in blocks of 200 "
-            "consecutive indices when carving dev. This affects dev only."
-        ),
-        B(
-            "<b>Small dev set:</b> thresholds are sensitive (0.07 to 0.35 across models). One live test image "
-            "is 0.26 points of BPCER; with one seed per run, differences under about 1 point of ACER are noise."
-        ),
-        B(
-            "<b>No cross-dataset test:</b> presentation attack detectors often generalise poorly to new cameras "
-            "and attack types, so these are within-dataset results."
-        ),
-        B(
-            "<b>Input assumption:</b> the model expects tightly cropped faces like the training data; whole "
-            "photos or other domains give unreliable scores."
-        ),
+        P("8. Running it", h2),
         P(
-            "<b>Next steps:</b> cross-dataset evaluation, several seeds with confidence intervals, a face "
-            "detector in front of the model, a subject-disjoint test subset, and quantisation-aware training "
-            "for a working INT8 model."
-        ),
-        P("7. Reproducing", h2),
-        P(
-            "<font face='Courier' size='8'>python scripts/prepare_lcc_fasd.py --src &lt;LCC_FASD folder&gt; --dst data/processed --resize 256<br/>"
-            "python -m liveness.train --config configs/default.yaml --override output.dir=runs/E04 train.epochs=8 train.patience=99 data.augment=basic<br/>"
-            "python -m liveness.evaluate --checkpoint runs/E04/best.pt --run-dir runs/E04 --tag fp32<br/>"
-            "python -m liveness.export --checkpoint runs/E04/best.pt --out-dir models/lite --no-quant<br/>"
+            "<font face='Courier' size='8.5'>pip install -r requirements.txt<br/>"
+            "pip install -e .<br/>"
             "python -m liveness.predict face.png --model models/lite/model_fp32.onnx</font>"
         ),
-        P(
-            "Full instructions, the experiment log and the design decisions are in README.md and docs/."
-        ),
+        P("The README explains how to retrain from the dataset and how to run the tests."),
     ]
 
     doc = SimpleDocTemplate(
         str(out),
         pagesize=A4,
-        leftMargin=1.8 * cm,
-        rightMargin=1.8 * cm,
-        topMargin=1.5 * cm,
-        bottomMargin=1.5 * cm,
+        leftMargin=1.9 * cm,
+        rightMargin=1.9 * cm,
+        topMargin=1.6 * cm,
+        bottomMargin=1.6 * cm,
         title="Lightweight genuine-vs-spoof image classification",
-        author="Anurag",
+        author=AUTHOR,
     )
     doc.build(story)
     print(f"wrote {out}")
@@ -440,7 +337,7 @@ def build(out: Path, demo_url: str) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--out", default="report.pdf")
-    parser.add_argument("--demo-url", default="")
+    parser.add_argument("--demo-url", default=DEMO_URL)
     args = parser.parse_args()
     build(Path(args.out), args.demo_url)
 

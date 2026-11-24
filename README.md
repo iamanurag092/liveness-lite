@@ -1,40 +1,50 @@
 # liveness-lite
 
-A lightweight deep-learning classifier that decides whether an input image is a **genuine (live) face**
-or a **spoof** (printed photo or screen replay). Built for the Deep Algorithms Solutions take-home:
-*"classify input images as genuine or spoofed, with high accuracy and low computational cost and
-memory"*. Python/PyTorch for training, ONNX for deployment, and a browser demo that runs the model
-client-side.
+A lightweight deep-learning model that decides whether an input image is a **genuine (live) face** or a
+**spoof** (a printed photo or a screen showing a face). Built for the Deep Algorithms Solutions take-home:
+*"classify input images as genuine or spoofed, with high accuracy and low computational cost and memory."*
 
-**Live demo:** _add the Vercel URL here after deploying (see docs/DEMO.md)_
-&nbsp;|&nbsp; **Report:** `report.pdf`
+- **Live demo:** https://liveness-lite-demo.vercel.app/ (runs in your browser; your image never leaves your device)
+- **Report:** [`report.pdf`](report.pdf), a short plain-language write-up of the dataset, model, results and limits
+- **Author:** Anurag Tiwari
 
-## Results
+## What it is
 
-Dataset: LCC-FASD, official test split (389 live, 3,377 spoof; about 90% spoof, so accuracy is not the
-headline). Threshold chosen on the dev split. Cost: ONNX Runtime, one CPU thread, batch 1.
+- **Dataset:** LCC-FASD, 18,827 face images labelled live or spoof. The official training and test lists are
+  used; part of the training list is set aside as a validation set.
+- **Model:** MobileNetV3 (a small convolutional neural network) that was already trained on ImageNet and then
+  fine-tuned on these images. Two sizes: **Lite** (MobileNetV3-Small) and **Accurate** (MobileNetV3-Large).
+- **Output:** one score between 0 and 1 (how likely the image is a spoof). A score above a cut-off, chosen
+  on the validation images, means spoof.
 
-| Model | Backbone | Params | GMACs | ONNX size | CPU p50 | Test ACER | APCER | BPCER | AUC |
-|---|---|---|---|---|---|---|---|---|---|
-| **Lite** | MobileNetV3-Small | 1.52M | 0.056 | 6.1 MB | about 2 ms | 4.27% | 3.91% | 4.63% | 0.9941 |
-| **Accurate** | MobileNetV3-Large | 4.20M | 0.215 | 16.8 MB | about 6 ms | 3.02% | 2.96% | 3.08% | 0.9968 |
+## Results (on the 3,766 test images)
 
-APCER = attacks accepted as live, BPCER = live images rejected, ACER = their mean. Read
-[docs/03_experiments.md](docs/03_experiments.md) before quoting these numbers: single seed, the official
-split is not subject-disjoint, the dev set is small, the Accurate model was chosen with the test results
-in view, and INT8 quantisation was tried and failed (not shipped). All disclosed there and in `report.pdf`.
+| Model | Accuracy | ROC-AUC | Live images wrongly flagged | Spoofs wrongly accepted | File size | Speed |
+|---|---|---|---|---|---|---|
+| **Lite** | 96.0% | 0.994 | 4.6% | 3.9% | 6 MB | about 2 ms |
+| **Accurate** | 97.0% | 0.997 | 3.1% | 3.0% | 17 MB | about 6 ms |
 
-## Quick start: classify an image
+About 90% of the images are spoofs, so accuracy alone can mislead (always answering "spoof" would score
+89.7%); that is why ROC-AUC and the two error rates are shown. Speed is one image on one laptop CPU core.
+The Accurate model was chosen with the test results in view, so its numbers may be slightly optimistic.
+Details and limits: `report.pdf` and the technical notes in `docs/`.
+
+## Try it
+
+**In the browser:** open the demo, pick Lite or Accurate, and upload a tightly cropped face image. It shows
+LIVE or SPOOF, the score, and how long the model took.
+
+**From the command line:**
 
 ```powershell
 pip install -r requirements.txt
 pip install -e .
 python -m liveness.predict path\to\cropped_face.png --model models/lite/model_fp32.onnx
 ```
-Prints LIVE or SPOOF with the spoof score and the stored decision threshold. Inputs should be tightly
-cropped faces like the training data; other images give unreliable scores.
 
-## Reproduce everything
+The model expects a tightly cropped face like the training images; whole photos give unreliable scores.
+
+## Reproduce
 
 ```powershell
 python -m venv .venv ; .\.venv\Scripts\Activate.ps1
@@ -48,37 +58,46 @@ python scripts/check_images.py --root data/processed --size 256
 python -m liveness.train --config configs/default.yaml --override output.dir=runs/E04_aug_basic train.epochs=8 train.patience=99 data.augment=basic
 python -m liveness.evaluate --config configs/default.yaml --checkpoint runs/E04_aug_basic/best.pt --run-dir runs/E04_aug_basic --tag fp32
 python -m liveness.export --config configs/default.yaml --checkpoint runs/E04_aug_basic/best.pt --out-dir models/lite --no-quant
-python scripts/run_experiments.py                       # the four ablations, evaluated
-python scripts/summarize_runs.py                        # docs/results_table.md
-python -m pytest -q                                     # unit and end-to-end tests
 ```
-More commands: [docs/USAGE.md](docs/USAGE.md). Training from a spinning hard drive is very slow; keep
-the processed data on an SSD.
+
+More commands: [docs/USAGE.md](docs/USAGE.md). Keep the processed data on an SSD; training from a spinning
+hard drive is many times slower.
+
+## Tests and automatic checks
+
+```powershell
+python -m pytest -q          # 28 automated tests
+node demo/preprocess.test.js # tests for the demo's image preparation
+```
+
+GitHub Actions runs these checks, plus a small end-to-end training run on synthetic data, on every push. The
+demo is hosted on Vercel and updates automatically when `main` changes.
 
 ## Repository layout
 
 ```
 src/liveness/   data, model, metrics, train, evaluate, export, predict
-scripts/        dataset preparation and checks, experiment runner, report and demo builders
+scripts/        dataset preparation and checks, experiment runner, report, demo and submission builders
 configs/        default.yaml (real runs), smoke.yaml (CI)
-tests/          metrics, data, model, ONNX export, predictor, preparation scripts
-demo/           static browser demo (onnxruntime-web); models are copied in by scripts/make_demo_assets.py
-docs/           plan, dataset notes, methodology, experiment log, decisions, demo guide
-.github/        CI: lint, tests, synthetic end-to-end run, size budget, demo preprocessing test
+tests/          automated tests
+demo/           static browser demo; models are copied in by scripts/make_demo_assets.py
+docs/           technical notes: dataset, methodology, experiment log, design decisions, demo guide
 models/         exported ONNX models and model cards (lite, accurate)
+.github/        automatic checks
 ```
 
-## Documentation
+The `docs/` folder holds the detailed technical notes (including the experiment log); the report and this
+README are the short versions.
 
-- [docs/01_dataset.md](docs/01_dataset.md): dataset, preparation, leakage findings, data integrity
-- [docs/02_methodology.md](docs/02_methodology.md): task definition, metrics, protocol, model
-- [docs/03_experiments.md](docs/03_experiments.md): experiment log, findings, model selection disclosure
-- [docs/DECISIONS.md](docs/DECISIONS.md): design decisions and why
-- [docs/DEMO.md](docs/DEMO.md): browser demo, local preview, Vercel deployment
-- [docs/PLAN.md](docs/PLAN.md): phases and status
+## Limits
 
-## Limits, briefly
+Tested only on this dataset, so other cameras or kinds of attack may do worse. The official training and test
+lists share 12 person IDs, so results may be slightly better than on completely new people. The model expects
+cropped faces. Each setting was trained once. Dataset images are photos of real people and are not
+redistributed in this repository or the demo.
 
-Within-dataset results only (no cross-dataset test); 12 subject ids appear in both official train/dev and
-test; single seed per run; the model expects cropped faces; latency is from one laptop. The dataset images
-are photos of real people and are not redistributed here.
+## Credits
+
+Dataset: LCC-FASD (Timoshenko et al.), from the Kaggle copy `aleksandrpikul222/lcc-fasd`; see that page for
+its licence and citation. Pretrained ImageNet weights come from torchvision. Inference uses ONNX Runtime and
+onnxruntime-web.
